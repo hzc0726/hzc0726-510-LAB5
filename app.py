@@ -1,84 +1,105 @@
 import streamlit as st
 import pandas as pd
-import pandas.io.sql as sqlio
+from sqlalchemy import create_engine
 import altair as alt
 import folium
 from streamlit_folium import st_folium
-import plotly.express as px
+from dotenv import load_dotenv
+import os
 
-from db import conn_str
+# Load environment variables
+load_dotenv()
 
+# Database connection string for SQLAlchemy
+db_user = os.getenv('DB_USER')
+db_pw = os.getenv('DB_PASSWORD')
+db_host = os.getenv('DB_HOST')
+db_port = os.getenv('DB_PORT')
+db_name = os.getenv('DB_NAME')
+sqlalchemy_conn_str = f'postgresql+psycopg2://{db_user}:{db_pw}@{db_host}:{db_port}/{db_name}'
+
+# Create SQLAlchemy engine
+engine = create_engine(sqlalchemy_conn_str)
+
+# Set up the title of the dashboard
 st.title("Seattle Events")
 
-df = sqlio.read_sql_query("SELECT * FROM events", conn_str)
+# Load data from the database
+df = pd.read_sql_query("SELECT * FROM events", con=engine)
 
-#Feature1: Data Visualization
-#1. What type of events is most common in Seattle?(Bar chart)
-st.subheader("What type of events is most common in Seattle?")
+# Ensure the 'date' column is in datetime format and timezone-aware
+df['date'] = pd.to_datetime(df['date'])  # Convert to datetime format
+df['date'] = df['date'].dt.tz_convert('UTC')  # Correct way to convert existing timezone-aware datetimes to UTC
 
-st.altair_chart(
-    alt.Chart(df).mark_bar().encode(x="count()", y=alt.Y("category").sort('-x')).interactive(),
-    use_container_width=True,
+# Filter out rows with NaT values in the 'date' column
+df = df.dropna(subset=['date'])
+
+# Extract month and day of the week from the 'date' column
+df['month'] = df['date'].dt.month_name()
+df['day_of_week'] = df['date'].dt.day_name()
+
+# Sidebar controls for filtering
+category = st.sidebar.selectbox("Select a category", ['All'] + sorted(df['category'].unique().tolist()))
+if category != 'All':
+    df = df[df['category'] == category]
+
+# Define a function to handle NaT values when parsing date input
+def date_input_with_nat(label, value):
+    try:
+        return st.sidebar.date_input(label, value=value)
+    except ValueError:
+        return st.sidebar.date_input(label)
+
+start_date = date_input_with_nat(
+    "Select start date",
+    value=df['date'].min()
 )
 
-
-#2. In which locations are events most frequently held?
-st.subheader("In which locations are events most frequently held?")
-
-chart1 = alt.Chart(df).mark_bar().encode(
-    x=alt.X('count()', title='Number of Events'),
-    y=alt.Y('location', sort='-x', title='Location')
-).properties(
-    width=700,
-    height=400
+end_date = date_input_with_nat(
+    "Select end date",
+    value=df['date'].max()
 )
-st.altair_chart(chart1, use_container_width=True)
 
+start_date = pd.to_datetime(start_date).tz_localize(None).tz_localize('UTC')
+end_date = pd.to_datetime(end_date).tz_localize(None).tz_localize('UTC')
 
+df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
 
-#3. Which month has the highest number of events in 2024?
-df['month'] = df['date'].dt.month
-chart2 = alt.Chart(df).mark_bar().encode(
-    x=alt.X('month', title='Month'),
-    y=alt.Y('count()', title='Number of Events')
-).properties(
-    width=700,
-    height=400
-)
-st.altair_chart(chart2, use_container_width=True)
+location = st.sidebar.selectbox("Select a location", ['All'] + sorted(df['location'].unique().tolist()))
+if location != 'All':
+    df = df[df['location'] == location]
 
-
-
-
-# Feature 2: Data control and filtering
-filtered_df = df.copy()
-
-# Dropdown to Filter by Category
-categories = df['category'].unique()
-selected_category = st.selectbox("Select a category", options=categories)
-filtered_df = filtered_df[filtered_df['category'] == selected_category]
-
-# Date Range Selector for Event Date
-min_date = df['date'].min().date()
-max_date = df['date'].max().date()
-selected_date_range = st.date_input("Select date range", value=[min_date, max_date], min_value=min_date, max_value=max_date)
-
-# Apply date range filter
-filtered_df = filtered_df[(filtered_df['date'].dt.date >= selected_date_range[0]) & (filtered_df['date'].dt.date <= selected_date_range[1])]
-
-# Dropdown to Filter by Location
-locations = ['All'] + list(df['location'].unique())
-selected_location = st.selectbox("Select a location", options=locations)
-
-if selected_location != 'All':
-    filtered_df = filtered_df[filtered_df['location'] == selected_location]
-    
-# Display the filtered DataFrame
-st.write(filtered_df)
-
+# Initialize and display the map with event locations
 m = folium.Map(location=[47.6062, -122.3321], zoom_start=12)
-folium.Marker([47.6062, -122.3321], popup='Seattle').add_to(m)
-st_folium(m, width=1200, height=600)
+for _, row in df.iterrows():
+    if pd.notnull(row['longitude']) and pd.notnull(row['latitude']):
+        folium.Marker([row['latitude'], row['longitude']], popup=row['title']).add_to(m)
+st_folium(m, width=800, height=400)
 
+# Chart for Event Categories
+chart_category = alt.Chart(df).mark_bar().encode(
+    x=alt.X('count()', title='Number of Events'),
+    y=alt.Y('category', sort='-x', title='Category'),
+    tooltip=['category', 'count()']
+).properties(title='Number of Events by Category').interactive()
+st.altair_chart(chart_category, use_container_width=True)
 
+# Chart for Month with Most Events
+chart_month = alt.Chart(df).mark_bar().encode(
+    x=alt.X('month:O', title='Month'),
+    y=alt.Y('count()', title='Number of Events'),
+    tooltip=['month', 'count()']
+).properties(title='Number of Events by Month').interactive()
+st.altair_chart(chart_month, use_container_width=True)
 
+# Chart for Day of the Week with Most Events
+chart_day_of_week = alt.Chart(df).mark_bar().encode(
+    x=alt.X('day_of_week:O', sort='-x', title='Day of the Week'),
+    y=alt.Y('count()', title='Number of Events'),
+    tooltip=['day_of_week', 'count()']
+).properties(title='Events by Day of the Week').interactive()
+st.altair_chart(chart_day_of_week, use_container_width=True)
+
+# Display filtered data as a table if the checkbox is checked
+if st.checkbox('Show filtered data'):
+    st.write(df)

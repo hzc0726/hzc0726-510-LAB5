@@ -1,17 +1,55 @@
-# TECHIN510_Lab5
+# TECHIN 510 - Lab 5 
+Seattle Events App
 
 ## Overview
-dynamic interface for investigating and representing data on Seattle's events, derived from a bespoke dataset created through web scraping. The tool delivers insights on the types of events, their venues, timings, and meteorological conditions, allowing for a comprehensive examination and filtration of the event scene in Seattle.
+Hi! This is the repository for my Seattle Events App for TECHIN 510.   
 
-## Project Structure
-scraper.py: Script for scraping event and weather data from Visit Seattle and weather APIs, storing the data in a PostgreSQL database hosted on Azure.
-app.py: Streamlit application for data visualization and data filtering
-db.py: Contains utility functions for database connection.
+## How to Run
 
-## How to run
-Environment Setup: Ensure Python 3.8+ is installed.
+Create a gitignore as your first step! Put the following In your gitignore file! 
+```
+.env
+venv
+data
+__pycache__
+```
 
-> import streamlit as st, import pandas as pd, import pandas.io.sql as sqlio, import altair as alt, import folium, from streamlit_folium import st_folium, import plotly.express as px
+Put the following in your requirements.txt file
+```
+psycopg2-binary
+requests
+python-dotenv
+streamlit-folium
+sqlalchemy
+```
 
-## Reflection
-During the development of the Seattle Events Interactive Data Visualization App, I have learned how to web scraping realtime data, data visualization through Streamlit,enhanced my skills in database management. This experience has sharpened my technical abilities and expanded my insight into presenting data in a way that is both accessible and captivating to a wide audience.
+Open the terminal and run the following commands:
+```    
+pip install -r requirements.txt 
+pip install streamlit
+
+```
+
+Run the app using the command in the terminal
+```bash
+streamlit run app.py
+```
+## Detailed Comment for Every Part
+- Function to fetch geolocation using Nominatim API
+- Function to get detailed page information
+- Function to insert data into PostgreSQL
+- Database connection setup
+
+## Lessons Learned
+- Example visualization: Number of events by category
+- Function to insert data into PostgreSQL
+
+## Questions / Uncertainties
+- If I want to scrape websites related to color analysis or color trends, how can I know which public webpages allow scrapeling? And how can I check if there is an official API provided?
+
+
+
+
+
+
+
